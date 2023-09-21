@@ -131,11 +131,11 @@ pub struct SecretStorageKey {
     secret_key: Box<[u8; 32]>,
 }
 
-impl std::fmt::Debug for SecretStorageKey {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for SecretStorageKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("SecretStorageKey")
             .field("storage_key_info", &self.storage_key_info)
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
@@ -178,13 +178,13 @@ impl TryFrom<SecretEncryptedData> for AesHmacSha2EncryptedData {
                     Ok(Self { iv: iv_array, ciphertext, mac: mac_array })
                 }
             }
-            _ => Err(serde_json::Error::custom("Unsupported secret storage algorithm.")),
+            _ => Err(serde_json::Error::custom("Unsupported secret storage algorithm")),
         }
     }
 }
 
 impl From<AesHmacSha2EncryptedData> for SecretEncryptedData {
-    fn from(value: AesHmacSha2EncryptedData) -> SecretEncryptedData {
+    fn from(value: AesHmacSha2EncryptedData) -> Self {
         SecretEncryptedData::AesHmacSha2EncryptedData {
             iv: Base64::new(value.iv.to_vec()),
             ciphertext: value.ciphertext,
@@ -333,7 +333,6 @@ impl SecretStorageKey {
         let key = if let Some(passphrase_info) = &content.passphrase {
             // If the content defines a passphrase, first try out deriving things from as
             // passphrase.
-
             match Self::from_passphrase(input, &content, passphrase_info) {
                 Ok(key) => key,
                 // Let us fallback to Base58 now, if that fails as well, return the original,
