@@ -255,8 +255,8 @@ impl SecretStorageKey {
                 }
             }
             _ => {
-                // TODO: Expose the algorithm name from Ruma so we can put it
-                // into the Error.
+                // TODO: Expose the algorithm name from Ruma so we can put it into the Error.
+                // Ruma issue: https://github.com/ruma/ruma/issues/1661
                 Err(DecodeError::UnsupportedAlgorithm)
             }
         }
