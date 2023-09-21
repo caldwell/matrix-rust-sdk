@@ -16,6 +16,8 @@
 //!
 //! [spec]: https://spec.matrix.org/v1.8/client-server-api/#storage
 
+use std::fmt;
+
 use hmac::{digest::MacError, Hmac};
 use pbkdf2::pbkdf2;
 use rand::{
@@ -50,10 +52,10 @@ pub enum DecodeError {
     /// The parity byte of the secret storage key didn't match.
     #[error("The parity byte of the secret storage key doesn't match: expected {0:?}, got {1:?}")]
     Parity(u8, u8),
-    /// The recovry key isn't valid base58.
+    /// The secret storage key isn't valid Base58.
     #[error(transparent)]
     Base58(#[from] bs58::decode::Error),
-    /// The  secret storage key isn't valid base64.
+    /// The  secret storage key isn't valid Base64.
     #[error(transparent)]
     Base64(#[from] vodozemac::Base64DecodeError),
     /// The secret storage key is too short, we couldn't read enough data.
@@ -203,8 +205,8 @@ impl SecretStorageKey {
     #[cfg(test)]
     const DEFAULT_PBKDF_ITERATIONS: u32 = 10;
 
-    // 35 bytes in total, 2 byte prefix, 32 bytes for the key material and one
-    // parity byte.
+    // 35 bytes in total: a 2-byte prefix, 32 bytes for the key material and one
+    // parity byte
     const DECODED_BASE58_KEY_LEN: usize = 2 + 32 + 1;
 
     /// Calculate a parity byte for the Base58 encoded variant of the
@@ -286,7 +288,7 @@ impl SecretStorageKey {
 
     /// Create a new passphrase based [`SecretStorageKey`].
     ///
-    /// The passphrase will be expanded into a 32 byte key using the `m.pbkdf2`
+    /// The passphrase will be expanded into a 32-byte key using the `m.pbkdf2`
     /// algorithm described in the [spec].
     ///
     /// [spec]: https://spec.matrix.org/v1.8/client-server-api/#deriving-keys-from-passphrases
@@ -369,8 +371,16 @@ impl SecretStorageKey {
         Ok(key)
     }
 
+    // Parse a secret storage key represented as a Base58 encoded string.
+    //
+    // This method reverses the process in the [`SecretStorageKey::to_base58()`]
+    // method.
     fn parse_base58_key(value: &str) -> Result<Box<[u8; 32]>, DecodeError> {
-        // Remove any whitespace we might have
+        // The spec tells us to remove any whitespace:
+        // > When decoding a raw key, the process should be reversed, with the exception
+        // > that whitespace is insignificant in the user’s input.
+        //
+        // Spec link: https://spec.matrix.org/unstable/client-server-api/#key-representation
         let value: String = value.chars().filter(|c| !c.is_whitespace()).collect();
 
         let mut decoded = bs58::decode(value).with_alphabet(bs58::Alphabet::BITCOIN).into_vec()?;
@@ -404,7 +414,7 @@ impl SecretStorageKey {
         }
     }
 
-    /// Try to create a [`SecretStorageKey`] from a base58 export.
+    /// Try to create a [`SecretStorageKey`] from a Base58 export.
     fn from_base58(
         value: &str,
         key_info: &SecretStorageKeyEventContent,
@@ -416,7 +426,7 @@ impl SecretStorageKey {
         Ok(key)
     }
 
-    /// Export the [`SecretStorageKey`] as a base58 encoded string as defined in
+    /// Export the [`SecretStorageKey`] as a Base58 encoded string as defined in
     /// the [spec].
     ///
     /// *Note*: This returns a copy of the private key material of the
@@ -425,16 +435,34 @@ impl SecretStorageKey {
     ///
     /// [spec]: https://spec.matrix.org/v1.8/client-server-api/#key-representation
     pub fn to_base58(&self) -> String {
+        const DISPLAY_CHUNK_SIZE: usize = 4;
+
         let mut bytes = Box::new([0u8; Self::DECODED_BASE58_KEY_LEN]);
 
+        // The key is prepended by the two bytes 0x8b and 0x01
         bytes[0..2].copy_from_slice(Self::PREFIX.as_slice());
         bytes[2..34].copy_from_slice(self.secret_key.as_slice());
+
+        // All the bytes in the string above, including the two header bytes, are XORed
+        // together to form a parity byte. This parity byte is appended to the byte
+        // string.
         bytes[34] = Self::parity_byte(self.secret_key.as_slice());
 
-        let ret =
+        // The byte string is encoded using base58, using the same mapping as is used
+        // for Bitcoin addresses.
+        let base_58 =
             bs58::encode(bytes.as_slice()).with_alphabet(bs58::Alphabet::BITCOIN).into_string();
 
         bytes.zeroize();
+
+        // The string is formatted into groups of four characters separated by spaces.
+        let ret = base_58
+            .chars()
+            .collect::<Vec<char>>()
+            .chunks(DISPLAY_CHUNK_SIZE)
+            .map(|c| c.iter().collect::<String>())
+            .collect::<Vec<_>>()
+            .join(" ");
 
         ret
     }
