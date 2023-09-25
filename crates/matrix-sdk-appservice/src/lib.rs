@@ -491,10 +491,12 @@ impl AppService {
                             room.timeline.events.push(raw_event.clone().cast())
                         }
                         Some(MembershipState::Knock) => {
-                            response.rooms.knock.entry(room_id).or_default();
+                            let room = response.rooms.knock.entry(room_id).or_default();
+                            room.knock_state.events.push(raw_event.clone().cast())
                         }
                         Some(MembershipState::Invite) => {
-                            response.rooms.invite.entry(room_id).or_default();
+                            let room = response.rooms.invite.entry(room_id.clone()).or_default();
+                            room.invite_state.events.push(raw_event.clone().cast())
                         }
                         Some(unknown) => debug!("Unknown membership type: {unknown}"),
                         None => debug!("Assuming {user_localpart} is not in {room_id}"),
